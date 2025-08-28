@@ -3,148 +3,217 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-<title>Chat de consultas geográficas (por opciones)</title>
+<title>Consultas geográficas por chat — árbol + 3 mapas</title>
 
-<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin />
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin></script>
+<!-- Leaflet -->
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+
+<!-- PapaParse para CSV -->
 <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
 
 <style>
   :root{
-    --bg:#06150f; --panel:#0b2018; --ink:#e6f4ef; --muted:#9bb3a9; --accent:#0a784f; --accent-ink:#0a5e41;
-    --chip:#103524; --border:#153c2a; --warn:#eab308; --err:#ef4444; --ok:#17c964;
+    --bg: #06150f;           /* fondo general */
+    --panel:#0b2018;         /* paneles */
+    --accent:#0a784f;        /* acento verde */
+    --accent-2:#1aa36f;      /* acento alterno */
+    --text:#e9f4ef;          /* texto principal */
+    --muted:#b9d2c6;         /* texto secundario */
+    --warn:#e8a33a;          /* advertencias */
+    --err:#ff6767;           /* errores visibles */
+    --border:#143529;        /* bordes suaves */
+    --bubble:#0e2a20;        /* burbujas chat */
   }
-  html,body{height:100%}
-  body{margin:0; background:var(--bg); color:var(--ink); font-family:system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Cantarell,Noto Sans,sans-serif;}
-  .app{display:grid; grid-template-columns:1fr; min-height:100vh}
+  html,body{margin:0;padding:0;height:100%;background:var(--bg);color:var(--text);font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;}
+  header{padding:14px 16px;border-bottom:1px solid var(--border);background:linear-gradient(180deg,#0c2018,#0a1913)}
+  header h1{font-size:18px;margin:0;color:#dff3ea;}
+  header p{margin:6px 0 0;color:var(--muted);font-size:13px}
 
-  header{border-bottom:1px solid var(--border); background:linear-gradient(180deg, rgba(10,120,79,.18), rgba(10,120,79,0));}
-  .wrap{max-width:960px; margin:0 auto; padding:14px 16px}
-  h1{margin:0; font-size:clamp(18px, 4vw, 22px)}
-  .tag{color:var(--muted); font-size:13px}
-
-  .main{display:grid; grid-template-columns:1fr; gap:14px; padding:12px 0}
+  main{display:grid;grid-template-columns: minmax(300px,520px) 1fr; gap:16px; padding:16px;}
+  @media (max-width: 980px){ main{grid-template-columns: 1fr;} }
 
   /* Chat */
-  .chat{max-width:960px; margin:0 auto; display:grid; gap:12px; padding: 0 16px 52px}
-  .msg{display:flex; gap:10px}
-  .msg.bot{justify-content:flex-start}
-  .msg.user{justify-content:flex-end}
-  .bubble{background:var(--panel); border:1px solid var(--border); padding:12px 14px; border-radius:14px; max-width:min(720px, 84vw);}
-  .bubble.bot{border-top-left-radius:6px}
-  .bubble.user{background:#0a5e41; border-color:transparent; border-bottom-right-radius:6px}
-  .opts{display:flex; flex-wrap:wrap; gap:8px; margin-top:10px}
-  .opt{appearance:none; background:var(--accent); border:none; color:#fff; padding:8px 12px; border-radius:999px; cursor:pointer; font-weight:600;}
-  .opt.secondary{background:transparent; color:#d1efe4; border:1px solid var(--border)}
+  .chat{background:var(--panel); border:1px solid var(--border); border-radius:16px; padding:12px; display:flex; flex-direction:column; min-height:60vh;}
+  .messages{flex:1; overflow:auto; padding:8px 6px; display:flex; flex-direction:column; gap:10px;}
+  .row{display:flex; gap:8px; align-items:flex-end;}
+  .row.user{justify-content:flex-end;}
+  .avatar{width:28px;height:28px;border-radius:50%;background:#123c2e;display:flex;align-items:center;justify-content:center;color:var(--accent-2);font-size:14px;}
+  .bubble{max-width:88%; background:var(--bubble); padding:10px 12px; border-radius:13px; border:1px solid var(--border); font-size:14px; line-height:1.35}
+  .row.user .bubble{background:#0f3125; border-color:#124835}
+  .small{font-size:12px;color:var(--muted)}
+  .opts{margin-top:8px;display:flex;flex-wrap:wrap;gap:8px}
+  .opt{background:#11372a;color:#d9f5eb;border:1px solid #164c3a;padding:8px 10px;border-radius:10px;cursor:pointer}
+  .opt.secondary{background:transparent;color:var(--muted);border-color:#244d3f}
+  .opt:hover{background:#144836}
 
-  .inline{display:flex; gap:8px; margin-top:8px; flex-wrap:wrap}
-  .inline input{flex:1; min-width:220px; padding:10px 12px; border-radius:12px; border:1px solid var(--border); background:#08170f; color:#fff}
-  .inline button{padding:10px 12px; border-radius:12px; border:1px solid var(--border); background:var(--accent); color:#fff; cursor:pointer}
+  /* Input */
+  .composer{display:flex; gap:8px; padding-top:8px; border-top:1px dashed var(--border)}
+  .composer input{flex:1;padding:10px 12px;border-radius:10px;border:1px solid var(--border);background:#0c1f18;color:var(--text)}
+  .composer button{background:var(--accent);color:#04120d;border:none;padding:10px 12px;border-radius:10px;cursor:pointer}
+  .composer button:hover{filter:brightness(1.05)}
 
-  .hint{font-size:12px; color:var(--muted); margin-top:6px}
-  .small{font-size:12px; color:var(--muted)}
-  .badge{display:inline-block; padding:2px 8px; border-radius:999px; font-size:11px; border:1px solid var(--border); background:#0b2418; margin-left:6px}
-  .badge.ok{border-color:#135a3d; color:#b9f3dd}
-  .badge.backup{border-color:#8b6d2a; color:#f7e7b0}
-  .badge.zero{border-color:#2e3d36; color:#cbd8d3}
-  .badge.down{border-color:#6b1f1f; color:#ffdbdb}
+  /* Maps */
+  .map-wrap{background:var(--panel); border:1px solid var(--border); border-radius:16px; padding:12px}
+  .map-tools{display:flex; gap:8px; align-items:center; justify-content:flex-start; margin-bottom:8px}
+  .btn{background:#11372a; color:#d9f5eb; border:1px solid #164c3a; padding:8px 10px; border-radius:10px; cursor:pointer}
+  .btn.primary{background:var(--accent); color:#04120d; border:none}
+  .btn:hover{filter:brightness(1.06)}
+  .warn{color:var(--warn)}
+  .error{color:var(--err)}
 
-  /* Mapa (oculto hasta tener punto + categoría) */
-  .map-wrap{max-width:1100px; margin:0 auto; padding: 0 16px 22px; display:none}
-  .map-tools{display:flex; align-items:center; gap:10px; margin:10px 0; flex-wrap:wrap}
-  .btn{background:transparent; border:1px solid var(--border); color:#d7eee6; padding:8px 10px; border-radius:10px; font-size:13px; text-decoration:none; cursor:pointer}
-  .btn.primary{background:var(--accent-ink); color:white; border-color:transparent}
-  #map{height:58vh; border:1px solid var(--border); border-radius:14px}
+  #results, #bufferResults{display:flex; flex-direction:column; gap:10px}
+  details{background:#0d241c;border:1px solid var(--border);border-radius:12px;padding:6px}
+  summary{cursor:pointer}
+  table{width:100%; border-collapse:collapse; margin:6px 0 2px}
+  td{border-bottom:1px dashed #134234; padding:3px 4px; font-size:13px}
+  td:first-child{color:var(--muted); width:36%}
 
-  details{background:#0b2418; border:1px solid var(--border); border-radius:12px; padding:8px 10px; margin:8px 0}
-  details>summary{cursor:pointer; font-weight:600}
-  table{width:100%; border-collapse:collapse; margin-top:6px; font-size:13px}
-  td{border-top:1px dashed var(--border); padding:6px; vertical-align:top}
-  td:first-child{color:#b7d1c7; width:40%}
+  /* FAB refresh */
+  .fab{position:fixed; right:16px; bottom:16px; background:var(--accent); color:#04120d; padding:12px 14px; border-radius:999px; border:none; cursor:pointer; box-shadow:0 10px 30px rgba(0,0,0,.25);}
 
-  .error{background:#230b0b; border:1px solid #501c1c; color:#ffdddd; padding:10px 12px; border-radius:12px}
+  .pill{display:inline-flex; align-items:center; gap:6px; padding:2px 8px; border-radius:999px; background:#0e2d23; border:1px solid #184c3a; font-size:12px}
 
-  /* Burbuja fija de refresco total */
-  .refresh-fab{position:fixed; right:16px; bottom:16px; z-index:9999}
-  .refresh-fab button{background:#0a5e41; color:#fff; border:none; border-radius:999px; padding:10px 14px; box-shadow:0 6px 18px rgba(0,0,0,.35); cursor:pointer; font-weight:700}
-
-  /* Lista de capas consultadas / toggles */
-  .layers-list{display:flex; flex-wrap:wrap; gap:8px; margin:6px 0}
-  .layer-chip{display:flex; align-items:center; gap:6px; border:1px solid var(--border); border-radius:999px; padding:4px 8px; background:#0b2418}
-  .layer-chip input{accent-color:#0a784f}
+  /* Inputs extra */
+  .map-tools input[type="text"], .map-tools input[type="number"]{background:#0c1f18; color:var(--text); border:1px solid var(--border); border-radius:8px; padding:6px 8px}
 </style>
 </head>
 <body>
   <header>
-    <div class="wrap">
-      <h1>Consultas geográficas (chat por opciones)</h1>
-      <div class="tag">Se ofrecen solo categorías con REST/REST de respaldo (tabla pública)</div>
-    </div>
+    <h1>Consultas geográficas desde chat</h1>
+    <p>Flujo en árbol → 1) Punto  2) Categoría  3) Resultados  → (opcional) Entorno</p>
   </header>
 
-  <main class="main">
-    <section class="chat" id="chat" aria-live="polite"></section>
-
-    <section class="map-wrap" id="mapWrap" aria-label="Resultados y mapa">
-      <div class="map-tools">
-        <button class="btn" id="btnBackToPoint">⟲ Volver a elegir punto</button>
-        <button class="btn" id="btnBackToCategory">⟲ Cambiar categoría</button>
-        <button class="btn" id="btnRefresh">Refrescar consulta</button>
-        <span class="small" id="mapStatus">—</span>
+  <main>
+    <!-- Panel izquierdo: chat -->
+    <section class="chat" aria-label="Chat principal">
+      <div class="messages" id="messages"></div>
+      <div class="composer">
+        <input id="freeInput" placeholder="Escribe aquí (p.ej., una dirección para buscar)…" />
+        <button id="sendBtn">Enviar</button>
       </div>
-      <div id="map" role="application" aria-label="Mapa"></div>
+    </section>
 
-      <!-- Panel de capas consultadas/toggles -->
-      <div id="layerToggles" class="layers-list" aria-label="Capas consultadas"></div>
+    <!-- Panel derecho: mapas y resultados -->
+    <section class="right">
+      <!-- Mapa 1: fijar ubicación -->
+      <section class="map-wrap" id="mapPointWrap" aria-label="Mapa inicial (fijar punto)" style="display:none">
+        <div class="map-tools">
+          <button class="btn" id="btnPickOnMap">Elegir punto en el mapa</button>
+          <button class="btn" id="btnGeolocate">Usar mi ubicación</button>
+          <input id="osmQuery" type="text" placeholder="Buscar dirección (OSM)" style="min-width:220px"/>
+          <button class="btn" id="btnOSM">Buscar</button>
+          <span class="small" id="mapPointStatus">—</span>
+        </div>
+        <div id="mapPoint" style="height:48vh; border:1px solid var(--border); border-radius:14px"></div>
+      </section>
 
-      <!-- Resultados -->
-      <div id="results" style="margin-top:10px"></div>
+      <!-- Mapa 2: resultados de intersección puntual -->
+      <section class="map-wrap" id="mapResultsWrap" aria-label="Mapa de resultados" style="display:none">
+        <div class="map-tools">
+          <button class="btn" id="btnBackToPoint">⟲ Volver a elegir punto</button>
+          <button class="btn" id="btnBackToCategory">⟲ Cambiar categoría</button>
+          <button class="btn" id="btnRefresh">Refrescar consulta</button>
+          <span class="small" id="mapResultsStatus">—</span>
+        </div>
+        <div id="mapResults" style="height:58vh; border:1px solid var(--border); border-radius:14px"></div>
+        <div id="results" style="margin-top:10px"></div>
+      </section>
 
-      <!-- Buscar cerca -->
-      <div id="nearbyBox" style="margin-top:12px; display:none">
-        <details open>
-          <summary>🔍 Buscar zonas cerca (radio configurable)</summary>
-          <div class="inline">
-            <label class="small" for="radiusKm">Radio (km, por defecto 10):</label>
-            <input id="radiusKm" type="number" min="1" max="200" step="1" value="10"/>
-            <button id="btnNearby" class="btn primary">Buscar cerca</button>
-            <span class="small" id="nearbyStatus">—</span>
-          </div>
-        </details>
-      </div>
+      <!-- Mapa 3: entorno (radio configurable) -->
+      <section class="map-wrap" id="mapBufferWrap" aria-label="Mapa de entorno" style="display:none">
+        <div class="map-tools">
+          <label class="small">Radio (km): 
+            <input id="bufferKm" type="number" min="1" max="100" value="10" style="width:80px; margin-left:6px">
+          </label>
+          <button class="btn primary" id="btnRunBuffer">Ampliar búsqueda</button>
+          <span class="small" id="mapBufferStatus">—</span>
+        </div>
+        <div id="mapBuffer" style="height:48vh; border:1px solid var(--border); border-radius:14px"></div>
+        <div id="bufferResults" style="margin-top:10px"></div>
+      </section>
     </section>
   </main>
 
-  <!-- Burbuja fija para refrescar TODO el chat -->
-  <div class="refresh-fab"><button id="fabRefresh">⟳ Refrescar chat</button></div>
+  <button class="fab" id="fabRefresh" title="Reiniciar todo">↻</button>
 
 <script>
-/* ===== Config ===== */
-const CSV_URL = 'https://docs.google.com/spreadsheets/d/1Smop4rx0K4pj5sHXD19DE3iqcwTCyqn9ohPxIuJsZ8s/export?format=csv&gid=0';
-const CO_VIEWBOX = '-79.1,12.6,-66.8,-4.3';
+// ===================== UTILIDADES BÁSICAS =====================
+const byId = (id)=>document.getElementById(id);
+const el = (tag, attrs={}, html)=>{ const n=document.createElement(tag); for(const k in attrs){ if(k==='className') n.className=attrs[k]; else n.setAttribute(k, attrs[k]); } if(html!=null) n.innerHTML=html; return n; };
+const sleep = (ms)=> new Promise(r=>setTimeout(r, ms));
 
-/* ===== State ===== */
+function deaccent(str){
+  return str.normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+}
+
+function urlWithParams(base, params){
+  const u = new URL(base, location.href);
+  Object.entries(params).forEach(([k,v])=>{ if(v!==undefined && v!==null) u.searchParams.set(k, v); });
+  return u.toString();
+}
+
+async function fetchText(url, opts={}){
+  const ctrl = new AbortController(); const t = setTimeout(()=>ctrl.abort(), opts.timeout||15000);
+  try{
+    const res = await fetch(url, {signal: ctrl.signal, headers: {'Accept':'text/plain, text/csv, */*'}});
+    if(!res.ok) return {error: 'HTTP '+res.status};
+    const txt = await res.text(); return {text: txt};
+  }catch(e){return {error: e.message||'fetch error'};} finally{clearTimeout(t)}
+}
+
+async function fetchJson(url, opts={}){
+  const ctrl = new AbortController(); const t = setTimeout(()=>ctrl.abort(), opts.timeout||15000);
+  try{
+    const res = await fetch(url, {signal: ctrl.signal, headers: {'Accept':'application/json'}});
+    if(!res.ok) return {error: 'HTTP '+res.status};
+    const js = await res.json(); if(js.error) return {error: js.error.message||'error', code: js.error.code};
+    return js;
+  }catch(e){ return {error: e.message||'fetch error'}; } finally{clearTimeout(t)}
+}
+
+// ===================== ESTADO GLOBAL =====================
 const STATE = {
-  catalog: [],
-  categories: [],
-  step: 0,            // 0: pedir método para punto; 1: punto fijado; 2: elegir categoría; 3: consultar/mostrar
-  point: null,        // {lat,lng}
+  step: 0,            // 0: punto, 2: categoría, 3: resultados
+  point: null,        // {lat, lng}
   category: null,
-  map: null,
-  marker: null,
-  drawn: {},          // layerId -> L.GeoJSON
-  defs: [],           // definiciones de capas en la categoría
-  lastMode: 'point'   // 'point' | 'nearby'
+  catalog: [],        // filas normalizadas del CSV
+  categories: [],
+  maps: { point:null, results:null, buffer:null },
+  markers: { point:null },
+  drawnResults: {},
+  drawnBuffer: {},
+  bufferCircle: null
 };
 
-/* ===== Utils ===== */
-const deaccent = s => (s||'').normalize('NFD').replace(/\p{Diacritic}/gu,'');
-const byId = id => document.getElementById(id);
-function el(tag, attrs={}, html=''){ const n=document.createElement(tag); Object.assign(n, attrs); if(html!==undefined) n.innerHTML=html; return n; }
-function scrollChat(){ const c=byId('chat'); c.scrollTop = c.scrollHeight; }
-function addBot(text){ const row=el('div',{className:'msg bot'}); row.appendChild(el('div',{className:'bubble bot'}, text)); byId('chat').appendChild(row); scrollChat(); return row; }
-function addUser(text){ const row=el('div',{className:'msg user'}); row.appendChild(el('div',{className:'bubble user'}, text)); byId('chat').appendChild(row); scrollChat(); }
-function clearChat(){ byId('chat').innerHTML=''; }
+// ===================== CHAT =====================
+const M = byId('messages');
+function addRow(kind, html){
+  const r = el('div',{className: 'row '+kind});
+  const a = el('div',{className:'avatar'}, kind==='user'?'T':'🌿');
+  const b = el('div',{className:'bubble'}, html);
+  r.appendChild(a); r.appendChild(b); M.appendChild(r); M.scrollTop = M.scrollHeight; return r;
+}
+function addBot(html){ return addRow('bot', html); }
+function addUser(html){ return addRow('user', html); }
+
+function restartAll(){
+  STATE.step=0; STATE.point=null; STATE.category=null;
+  byId('mapPointWrap').style.display='none'; byId('mapResultsWrap').style.display='none'; byId('mapBufferWrap').style.display='none';
+  byId('results').innerHTML=''; byId('bufferResults').innerHTML='';
+  byId('mapResultsStatus').textContent='—'; byId('mapBufferStatus').textContent='—'; byId('mapPointStatus').textContent='—';
+  // Limpiar mapas
+  Object.keys(STATE.maps).forEach(k=>{ const m=STATE.maps[k]; if(m){ m.eachLayer(l=>{ if(l instanceof L.TileLayer) return; if(l.remove) m.removeLayer(l); }); } });
+  STATE.markers.point=null; STATE.drawnResults={}; STATE.drawnBuffer={};
+  if(STATE.bufferCircle && STATE.maps.buffer){ STATE.maps.buffer.removeLayer(STATE.bufferCircle); STATE.bufferCircle=null; }
+  M.innerHTML='';
+  intro();
+}
+
+byId('fabRefresh').onclick = restartAll;
+
+// ===================== CATALOGO (CSV) =====================
+const CSV_URL = 'https://docs.google.com/spreadsheets/d/1Smop4rx0K4pj5sHXD19DE3iqcwTCyqn9ohPxIuJsZ8s/export?format=csv&gid=0';
 
 function normalizeRecord(rec){
   const out={};
@@ -154,464 +223,356 @@ function normalizeRecord(rec){
   }
   out.titulo       = out.titulo || out.title || '';
   out.descripcion  = out.descripcion || out.description || '';
-  out.categoria    = out.categoria || out.categoria_ || out['categor_a'] || '';
+  out.categoria    = out.categoria || '';
   out.rest         = out.rest || '';
-  out.rest_respaldo= out['rest_de_respaldo'] || out['rest_respaldo'] || '';
-  out.origen       = out.origen || out.fuente || '';
-  out.acceso       = out.acceso || '';
+  out.rest_respaldo= out.rest_respaldo || out.rest_de_respaldo || '';
+  out.acceso       = out.acceso || out.link || '';
   return out;
 }
 
 async function loadCatalog(){
-  return new Promise((resolve,reject)=>{
-    Papa.parse(CSV_URL,{download:true, header:true, skipEmptyLines:true,
-      complete:(res)=>{ try{ STATE.catalog = res.data.map(normalizeRecord); resolve(STATE.catalog);}catch(e){reject(e)} },
-      error:(e)=>reject(e)
-    });
-  });
-}
-
-function computeCategories(){
-  const ok = STATE.catalog.filter(r=> (r.rest && r.rest.length>6) || (r.rest_respaldo && r.rest_respaldo.length>6));
-  const set = new Set(ok.map(r=>r.categoria).filter(Boolean));
-  STATE.categories = Array.from(set).sort((a,b)=>a.localeCompare(b,'es',{sensitivity:'base'}));
-}
-
-/* ===== Mapa ===== */
-function ensureMap(){
-  // Mostrar mapa SOLO cuando hay punto + categoría (estructura árbol)
-  const wrap = byId('mapWrap');
-  if(STATE.point && STATE.category){ wrap.style.display='block'; } else { wrap.style.display='none'; }
-  if(STATE.map) return STATE.map;
-  STATE.map = L.map('map',{zoomControl:true, minZoom:3}).setView([3.9,-73.1], 5);
-  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19, attribution:'&copy; OpenStreetMap contrib.'}).addTo(STATE.map);
-  return STATE.map;
-}
-
-function setMarker(ll){
-  if(!STATE.point || !STATE.category) return; // respeta el árbol
-  ensureMap();
-  if(STATE.marker){ STATE.map.removeLayer(STATE.marker); }
-  STATE.marker = L.marker(ll).addTo(STATE.map);
-  STATE.map.setView(ll, 12);
-}
-
-function clearDrawn(){
-  Object.values(STATE.drawn).forEach(layer=>{ if(STATE.map && STATE.map.hasLayer(layer)) STATE.map.removeLayer(layer); });
-  STATE.drawn = {};
-  byId('layerToggles').innerHTML = '';
-}
-
-/* ===== Flujo y rebobinado ===== */
-function goToStep(step){
-  STATE.step = step;
-  clearChat();
-  if(step===0) renderStep0();
-  if(step>=1){ renderStep0(true); renderStep1(); }
-  if(step>=2){ renderStep2(); }
-  if(step>=3){ renderStep3(); }
-}
-
-function renderStep0(skipIntro=false){
-  if(!skipIntro){ addBot('<b>Hola.</b> Primero, define el punto para consultar.'); }
-  const row = addBot('Elige una opción:');
-  const opts = el('div',{className:'opts'});
-  const b1 = el('button',{className:'opt'},'📍 Usar mi ubicación');
-  const b2 = el('button',{className:'opt secondary'},'🔎 Buscar con OSM');
-  const b3 = el('button',{className:'opt secondary'},'⌨️ Ingresar coordenadas');
-  opts.append(b1,b2,b3); row.querySelector('.bubble').appendChild(opts);
-  b1.onclick = handleUseMyLocation;
-  b2.onclick = handleOSMSearch;
-  b3.onclick = handleCoordsInput;
-}
-
-function renderStep1(){
-  if(!STATE.point){ return; }
-  addUser(`Ubicación establecida: ${STATE.point.lat.toFixed(5)}, ${STATE.point.lng.toFixed(5)}`);
-  // NO mostrar mapa aún (se muestra en step 3 con categoría seleccionada)
-}
-
-function renderStep2(){
-  const available = STATE.categories.slice();
-  if(!available.length){ addBot('<span class="error">No hay categorías con REST disponible en la tabla.</span>'); return; }
-  const row = addBot('Ahora elige la <b>categoría de consulta</b>:');
-  const opts = el('div',{className:'opts'});
-  available.forEach(cat=>{
-    const b = el('button',{className:'opt'}, cat);
-    b.onclick = ()=>{ STATE.category = cat; addUser(cat); goToStep(3); runQueryPoint(); };
-    opts.appendChild(b);
-  });
-  row.querySelector('.bubble').appendChild(opts);
-}
-
-function renderStep3(){
-  ensureMap(); // ahora sí, punto+categoría están definidos
-  byId('mapStatus').textContent = 'Consultando intersección puntual…';
-}
-
-/* ===== Entrada de punto ===== */
-function handleUseMyLocation(){
-  addUser('Usar mi ubicación');
-  if(!navigator.geolocation){ addBot('<span class="error">Tu navegador no permite geolocalización.</span>'); return; }
-  addBot('Obteniendo tu ubicación…');
-  navigator.geolocation.getCurrentPosition((pos)=>{
-    STATE.point = {lat:pos.coords.latitude, lng:pos.coords.longitude};
-    goToStep(1); renderStep2();
-  }, (err)=>{ addBot(`<span class=\"error\">No se pudo obtener ubicación: ${err.message}</span>`); });
-}
-
-function handleOSMSearch(){
-  const row = addBot('Escribe un lugar o dirección en Colombia.');
-  const box = el('div',{className:'inline'});
-  const inp = el('input',{type:'text', placeholder:'Cra 7 # 12-34, Bogotá… o “Parque Arví”'});
-  const btn = el('button',{},'Buscar');
-  box.append(inp,btn); row.querySelector('.bubble').appendChild(box);
-  btn.onclick=()=> doOSMSearch(inp.value);
-  inp.addEventListener('keydown',(e)=>{ if(e.key==='Enter') doOSMSearch(inp.value); });
-}
-
-async function doOSMSearch(q){
-  const text = (q||'').trim(); if(!text) return;
-  addUser(text);
-  try{
-    const url = `https://nominatim.openstreetmap.org/search?format=jsonv2&q=${encodeURIComponent(text)}&addressdetails=1&limit=5&countrycodes=co&viewbox=${CO_VIEWBOX}&bounded=1`;
-    const res = await fetch(url, {headers:{'Accept':'application/json'}});
-    if(!res.ok) throw new Error('Sin respuesta de Nominatim');
-    const items = await res.json();
-    if(!items.length){ addBot('Sin resultados en Colombia para esa búsqueda.'); return; }
-    if(items.length===1){
-      const it = items[0];
-      STATE.point = {lat:parseFloat(it.lat), lng:parseFloat(it.lon)};
-      goToStep(1); renderStep2();
-    } else {
-      const row = addBot('Selecciona el resultado correcto:');
-      const opts = el('div',{className:'opts'});
-      items.forEach(it=>{
-        const b = el('button',{className:'opt secondary'}, it.display_name.slice(0,64)+'…');
-        b.onclick = ()=>{ STATE.point = {lat:parseFloat(it.lat), lng:parseFloat(it.lon)}; goToStep(1); renderStep2(); };
-        opts.appendChild(b);
-      });
-      row.querySelector('.bubble').appendChild(opts);
-    }
-  }catch(e){ addBot(`<span class=\"error\">Error buscando: ${e.message}</span>`); }
-}
-
-function handleCoordsInput(){
-  const row = addBot('Ingresa coordenadas (lat, lng). Ej: 4.7110, -74.0721');
-  const box = el('div',{className:'inline'});
-  const inp = el('input',{type:'text', placeholder:'lat, lng'});
-  const btn = el('button',{},'Usar');
-  box.append(inp,btn); row.querySelector('.bubble').appendChild(box);
-  btn.onclick = ()=>{
-    const parts = (inp.value||'').split(',').map(x=>parseFloat(x.trim()));
-    if(parts.length===2 && parts.every(x=>!isNaN(x))){
-      STATE.point = {lat:parts[0], lng:parts[1]};
-      goToStep(1); renderStep2();
-    } else {
-      addBot('<span class="error">Formato inválido. Usa: lat, lng</span>');
-    }
-  };
-}
-
-/* ===== REST helpers ===== */
-function urlWithParams(base, params){
-  const u = new URL(base);
-  Object.entries(params).forEach(([k,v])=> u.searchParams.set(k,String(v)));
-  return u.toString();
-}
-
-async function fetchJson(u, extra={}){
-  const url = u.includes('?') ? `${u}&f=json` : `${u}?f=json`;
-  const ctrl = new AbortController();
-  const t = setTimeout(()=>ctrl.abort('timeout'), 12000);
-  try{
-    const res = await fetch(url, {signal:ctrl.signal, ...extra});
-    clearTimeout(t);
-    if(!res.ok) throw new Error('HTTP '+res.status);
-    return await res.json();
-  }catch(e){ clearTimeout(t); return {error:String(e)}; }
-}
-
-function isMapServerRoot(info){ return info && info.currentVersion && Array.isArray(info.layers) && !info.type; }
-
-async function expandToFeatureLayers(url){
-  const info = await fetchJson(url);
-  if(info.error) return {error:info.error, layers:[]};
-  if(isMapServerRoot(info)){
-    const layers = (info.layers||[]).filter(l=> !l.subLayerIds || !l.subLayerIds.length);
-    return {layers: layers.map(l=> `${url.replace(/\/?$/,'')}/${l.id}`)};
-  }
-  return {layers:[url]};
-}
-
-async function queryLayer(layerUrl, point, distanceMeters){
-  const info = await fetchJson(layerUrl);
-  if(info.error) return {error:'Servicio no disponible', layerUrl};
-
-  const base = {
-    where: '1=1', f:'json', returnGeometry:true, outFields:'*',
-    geometry: JSON.stringify({x:point.lng, y:point.lat, spatialReference:{wkid:4326}}),
-    geometryType: 'esriGeometryPoint', spatialRel:'esriSpatialRelIntersects',
-    inSR:4326, outSR:4326
-  };
-  const params = distanceMeters ? {...base, distance:distanceMeters, units:'esriSRUnit_Meter'} : base;
-  const queryUrl = layerUrl.replace(/\/?$/,'') + '/query';
-  const u = urlWithParams(queryUrl, params);
-  const js = await fetchJson(u);
-  if(js.error || js.code){ return {error: js.error? String(js.error): ('HTTP '+js.code)}; }
-  const feats = Array.isArray(js.features)? js.features: [];
-  return {features:feats};
+  const r = await fetchText(CSV_URL); if(r.error){ addBot('<span class="error">No pude cargar la tabla pública. Intenta más tarde.</span>'); return; }
+  const parsed = Papa.parse(r.text, {header:true, skipEmptyLines:true});
+  const rows = (parsed.data||[]).map(normalizeRecord)
+    .filter(r => (r.rest && r.rest.length>6) || (r.rest_respaldo && r.rest_respaldo.length>6));
+  STATE.catalog = rows;
+  const cats = Array.from(new Set(rows.map(r=>r.categoria).filter(Boolean))).sort();
+  STATE.categories = cats;
 }
 
 function getDefsForCategory(cat){
-  const rows = STATE.catalog.filter(r=> r.categoria===cat && ((r.rest && r.rest.length>6) || (r.rest_respaldo && r.rest_respaldo.length>6)));
-  return rows.map((r,i)=> ({
-    id:`${deaccent(cat.toLowerCase()).replace(/[^a-z0-9]/g,'_')}_${i}`,
-    name:r.titulo||r.descripcion||r.origen||`Capa ${i+1}`,
-    primary:r.rest, backup:r.rest_respaldo,
-    acceso:r.acceso, descripcion:r.descripcion
+  const rows = STATE.catalog.filter(r=> r.categoria===cat && ((r.rest && r.rest.length>6) || (r.rest_respaldo && r.rest_respaldo.length>6)) );
+  return rows.map((r,i)=>({
+    id: `${deaccent(cat.toLowerCase()).replace(/[^a-z0-9]/g,'_')}_${i}`,
+    name: r.titulo || r.descripcion || `Capa ${i+1}`,
+    primary: r.rest,
+    backup: r.rest_respaldo,
+    acceso: r.acceso,
+    desc: r.descripcion
   }));
 }
 
-/* ===== Consultas ===== */
-async function runQueryPoint(){
-  if(!STATE.point || !STATE.category){ addBot('<span class="error">Faltan datos (punto y categoría).</span>'); return; }
-  STATE.lastMode = 'point';
-  clearDrawn();
-  byId('results').innerHTML = '';
-  byId('mapStatus').textContent = 'Consultando intersección puntual…';
-  byId('nearbyBox').style.display = 'block'; // ofrecer luego “buscar cerca”
-  ensureMap(); setMarker(STATE.point);
+// ===================== MAPAS =====================
+function ensureMap(kind){
+  const id = kind==='point' ? 'mapPoint' : kind==='results' ? 'mapResults' : 'mapBuffer';
+  const wrapId = kind==='point' ? 'mapPointWrap' : kind==='results' ? 'mapResultsWrap' : 'mapBufferWrap';
+  const wrap = byId(wrapId); wrap.style.display='block';
+  if(STATE.maps[kind]) return STATE.maps[kind];
+  const m = L.map(id,{zoomControl:true,minZoom:3}).setView([4.6,-74.1],6);
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19, attribution:'© OpenStreetMap'}).addTo(m);
+  STATE.maps[kind]=m; return m;
+}
 
-  STATE.defs = getDefsForCategory(STATE.category);
-  if(!STATE.defs.length){ addBot('<span class="error">No hay capas con REST en esta categoría.</span>'); return; }
+function resetFromPointChange(){
+  STATE.category = null;
+  // limpiar mapas de resultados y entorno
+  if(STATE.maps.results){ STATE.maps.results.eachLayer(l=>{ if(!(l instanceof L.TileLayer)) STATE.maps.results.removeLayer(l); }); }
+  if(STATE.maps.buffer){ STATE.maps.buffer.eachLayer(l=>{ if(!(l instanceof L.TileLayer)) STATE.maps.buffer.removeLayer(l); }); }
+  byId('results').innerHTML=''; byId('bufferResults').innerHTML='';
+  byId('mapResultsStatus').textContent='—'; byId('mapBufferStatus').textContent='—';
+  STATE.drawnResults = {}; STATE.drawnBuffer={};
+  if(STATE.bufferCircle && STATE.maps.buffer){ STATE.maps.buffer.removeLayer(STATE.bufferCircle); STATE.bufferCircle=null; }
+  byId('mapResultsWrap').style.display='none';
+  byId('mapBufferWrap').style.display='none';
+}
 
-  addBot('Consultando servicios de la categoría seleccionada…');
-  const layerStatuses = [];
+function resetFromCategoryChange(){
+  if(STATE.maps.results){ STATE.maps.results.eachLayer(l=>{ if(!(l instanceof L.TileLayer)) STATE.maps.results.removeLayer(l); }); }
+  if(STATE.maps.buffer){ STATE.maps.buffer.eachLayer(l=>{ if(!(l instanceof L.TileLayer)) STATE.maps.buffer.removeLayer(l); }); }
+  byId('results').innerHTML=''; byId('bufferResults').innerHTML='';
+  byId('mapResultsStatus').textContent='—'; byId('mapBufferStatus').textContent='—';
+  STATE.drawnResults = {}; STATE.drawnBuffer={};
+  if(STATE.bufferCircle && STATE.maps.buffer){ STATE.maps.buffer.removeLayer(STATE.bufferCircle); STATE.bufferCircle=null; }
+  byId('mapBufferWrap').style.display='none';
+}
+
+// ===================== ARCGIS REST HELPERS =====================
+function isLayerUrl(u){ return /\/(MapServer|FeatureServer)\/(\d+)(?:\/?$)/i.test(u); }
+function isServerRoot(u){ return /\/(MapServer|FeatureServer)\/?$/i.test(u); }
+
+async function expandToFeatureLayers(u){
+  // Devuelve una lista de URLs de capa consultables /{idx}
+  if(isLayerUrl(u)) return [u];
+  if(!isServerRoot(u)) return [u];
+  const info = await fetchJson(u + (u.includes('?')?'&':'?') + 'f=json');
+  if(info.error) return [u];
+  const layers = (info.layers||info?.layers)||[]; // MapServer
+  const flayers = (info?.layers||[]).filter(x=> x.type==='Feature Layer');
+  const out = (flayers.length? flayers: layers).map(l=> u.replace(/\/?$/,'/') + (l.id!=null? l.id : l.layerId));
+  return out.length? out: [u];
+}
+
+async function queryLayerAtPoint(layerUrl, point){
+  // Consulta de intersección EXACTA con punto (sin distancia)
+  const urls = await expandToFeatureLayers(layerUrl);
+  const all = [];
+  for(const u of urls){
+    const queryUrl = u.replace(/\/?$/,'/') + 'query';
+    const params = {
+      where:'1=1', f:'json', returnGeometry:false, outFields:'*',
+      geometry: JSON.stringify({x:point.lng, y:point.lat, spatialReference:{wkid:4326}}),
+      geometryType:'esriGeometryPoint', spatialRel:'esriSpatialRelIntersects',
+      inSR:4326, outSR:4326
+    };
+    const js = await fetchJson(urlWithParams(queryUrl, params));
+    if(js.error || js.code){ return {error: js.error? String(js.error): ('HTTP '+js.code)}; }
+    const feats = Array.isArray(js.features)? js.features: [];
+    all.push({url:u, features:feats});
+  }
+  const merged = all.flatMap(x=> x.features.map(f=> ({...f, __layer:x.url})));
+  return {features: merged, strategy:'point'};
+}
+
+async function queryLayerInRadius(layerUrl, point, radiusMeters){
+  const urls = await expandToFeatureLayers(layerUrl);
+  const all = [];
+  for(const u of urls){
+    const queryUrl = u.replace(/\/?$/,'/') + 'query';
+    const params = {
+      where:'1=1', f:'json', returnGeometry:false, outFields:'*',
+      geometry: JSON.stringify({x:point.lng, y:point.lat, spatialReference:{wkid:4326}}),
+      geometryType:'esriGeometryPoint', spatialRel:'esriSpatialRelIntersects',
+      inSR:4326, outSR:4326, distance: radiusMeters, units:'esriSRUnit_Meter'
+    };
+    const js = await fetchJson(urlWithParams(queryUrl, params));
+    if(js.error || js.code){ return {error: js.error? String(js.error): ('HTTP '+js.code)}; }
+    const feats = Array.isArray(js.features)? js.features: [];
+    all.push({url:u, features:feats});
+  }
+  const merged = all.flatMap(x=> x.features.map(f=> ({...f, __layer:x.url})));
+  return {features: merged, strategy:'buffer'};
+}
+
+// ===================== FLUJO (ÁRBOL) =====================
+function goToStep(step){
+  STATE.step = step;
+  if(step===0){
+    ensureMap('point'); byId('mapPointWrap').style.display='block';
+    addBot('Primero, fijemos el punto. Puedes <b>elegir en el mapa</b>, <b>usar tu ubicación</b> o <b>buscar una dirección</b>.');
+  }
+  if(step===2){
+    if(!STATE.point){ addBot('<span class="error">Aún no has elegido un punto.</span>'); return; }
+    const cats = STATE.categories.filter(c=> getDefsForCategory(c).length>0);
+    addBot('Elige una categoría para consultar:');
+    const row = addBot(''); const box = el('div',{className:'opts'}); row.querySelector('.bubble').appendChild(box);
+    cats.forEach(c=>{ const b=el('button',{className:'opt'}, c||'—'); b.onclick=()=>{ addUser(c); STATE.category=c; resetFromCategoryChange(); goToStep(3); }; box.appendChild(b); });
+  }
+  if(step===3){
+    runQuery();
+  }
+}
+
+async function runQuery(){
+  if(!STATE.point || !STATE.category){ addBot('<span class="error">Faltan datos para consultar (punto y categoría).</span>'); return; }
+  resetFromCategoryChange();
+  const m = ensureMap('results'); byId('mapResultsWrap').style.display='block';
+  byId('mapResultsStatus').textContent='Consultando…';
+
+  const defs = getDefsForCategory(STATE.category);
+  if(!defs.length){ addBot('<span class="error">No hay capas con REST en esta categoría.</span>'); return; }
+
+  addBot(`Consultando <b>${defs.length}</b> capa(s) de "${STATE.category}"…`);
   const results = [];
-
-  for(const def of STATE.defs){
-    addBot(`Consultando <b>${def.name}</b>…`);
-    // expandir si es raíz
-    const expanded = await expandToFeatureLayers(def.primary);
-    const targetLayers = expanded.layers.length ? expanded.layers : [def.primary];
-
-    let foundFeatures = [];
+  for(const def of defs){
+    addBot(`• Consultando <b>${def.name}</b>…`);
+    let r = await queryLayerAtPoint(def.primary, STATE.point); // primaria exacta
     let usedBackup = false;
-    let anyError = false;
-
-    // intentar primaria (todas las subcapas)
-    for(const lyr of targetLayers){
-      const r = await queryLayer(lyr, STATE.point, null);
-      if(r.error){ anyError = true; continue; }
-      if(r.features && r.features.length){ foundFeatures = foundFeatures.concat(r.features.map(ft => ({...ft, _layerUrl: lyr}))); }
+    if(r.error && def.backup){
+      addBot('↪ La capa no respondió, intentando con respaldo…');
+      usedBackup = true; r = await queryLayerAtPoint(def.backup, STATE.point);
+      if(!r.error) addBot('✓ Respaldo respondió correctamente.');
     }
-
-    // si primaria falló totalmente o no dio intersecciones y hay respaldo → intentar respaldo
-    if((!foundFeatures.length || anyError) && def.backup){
-      addBot(`La capa principal no respondió o no intersectó. Intentando respaldo para <b>${def.name}</b>…`);
-      const expB = await expandToFeatureLayers(def.backup);
-      const bLayers = expB.layers.length ? expB.layers : [def.backup];
-      usedBackup = true;
-      anyError = false;
-      foundFeatures = [];
-      for(const lyr of bLayers){
-        const r = await queryLayer(lyr, STATE.point, null);
-        if(r.error){ anyError = true; continue; }
-        if(r.features && r.features.length){ foundFeatures = foundFeatures.concat(r.features.map(ft => ({...ft, _layerUrl: lyr}))); }
-      }
-    }
-
-    const status = foundFeatures.length ? (usedBackup ? 'backup' : 'ok') : (anyError ? 'down' : 'zero');
-    layerStatuses.push({id:def.id, name:def.name, status});
-    results.push({def, features:foundFeatures, usedBackup, status});
+    if(r.error && !def.backup) addBot('<span class="small">✗ No hay respaldo disponible.</span>');
+    results.push({def, usedBackup, ...r});
   }
-
-  presentResults(results, layerStatuses);
+  presentResults(results);
 }
 
-async function runQueryNearby(){
-  if(!STATE.point || !STATE.category){ return; }
-  STATE.lastMode = 'nearby';
-  const km = Math.max(1, Math.min(200, parseInt(byId('radiusKm').value||'10',10)));
-  const m = km * 1000;
-  byId('nearbyStatus').textContent = `Consultando radio ${km} km…`;
-  clearDrawn();
-  byId('results').innerHTML = '';
-  byId('mapStatus').textContent = `Buscando cerca (${km} km)…`;
-
-  const layerStatuses = [];
-  const results = [];
-
-  for(const def of STATE.defs){
-    // expandir y consultar con distancia
-    const expanded = await expandToFeatureLayers(def.primary);
-    const targetLayers = expanded.layers.length ? expanded.layers : [def.primary];
-
-    let foundFeatures = [];
-    let usedBackup = false;
-    let anyError = false;
-
-    for(const lyr of targetLayers){
-      const r = await queryLayer(lyr, STATE.point, m);
-      if(r.error){ anyError = true; continue; }
-      if(r.features && r.features.length){ foundFeatures = foundFeatures.concat(r.features.map(ft => ({...ft, _layerUrl: lyr}))); }
-    }
-
-    if((!foundFeatures.length || anyError) && def.backup){
-      const expB = await expandToFeatureLayers(def.backup);
-      const bLayers = expB.layers.length ? expB.layers : [def.backup];
-      usedBackup = true;
-      anyError = false;
-      foundFeatures = [];
-      for(const lyr of bLayers){
-        const r = await queryLayer(lyr, STATE.point, m);
-        if(r.error){ anyError = true; continue; }
-        if(r.features && r.features.length){ foundFeatures = foundFeatures.concat(r.features.map(ft => ({...ft, _layerUrl: lyr}))); }
-      }
-    }
-
-    const status = foundFeatures.length ? (usedBackup ? 'backup' : 'ok') : (anyError ? 'down' : 'zero');
-    layerStatuses.push({id:def.id, name:def.name, status});
-    results.push({def, features:foundFeatures, usedBackup, status, nearbyKm:km});
-  }
-
-  presentResults(results, layerStatuses, true);
-  byId('nearbyStatus').textContent = '—';
-}
-
-/* ===== Presentación de resultados ===== */
-function addLayerToggle(defId, name, status){
-  const cont = byId('layerToggles');
-  const chip = el('label',{className:'layer-chip'});
-  const inp = el('input',{type:'checkbox', checked:true});
-  const st = el('span',{className:'badge '+(status==='ok'?'ok':status==='backup'?'backup':status==='down'?'down':'zero')}, status.toUpperCase());
-  chip.append(inp, el('span',{}, name), st);
-  cont.appendChild(chip);
-  inp.addEventListener('change',()=>{
-    const layer = STATE.drawn[defId];
-    if(!STATE.map || !layer) return;
-    if(inp.checked){ layer.addTo(STATE.map); }
-    else { STATE.map.removeLayer(layer); }
-  });
-}
-
-function featuresToGeoJSON(features){
-  // Convierte una lista de features ArcGIS a GeoJSON (simple)
-  const feats = [];
-  for(const f of (features||[])){
-    if(!f.geometry) continue;
-    // ArcGIS geometries: point, polyline, polygon
-    let geom=null;
-    if(f.geometry.x!=null && f.geometry.y!=null){
-      geom = {type:'Point', coordinates:[f.geometry.x, f.geometry.y]};
-    }else if(Array.isArray(f.geometry.paths)){
-      // polylines: tomar primer path
-      geom = {type:'LineString', coordinates: (f.geometry.paths[0]||[]).map(([x,y])=>[x,y])};
-    }else if(Array.isArray(f.geometry.rings)){
-      geom = {type:'Polygon', coordinates: [ (f.geometry.rings[0]||[]).map(([x,y])=>[x,y]) ]};
-    }
-    if(geom){ feats.push({type:'Feature', properties:f.attributes||{}, geometry:geom}); }
-  }
-  return {type:'FeatureCollection', features:feats};
-}
-
-function presentResults(results, layerStatuses, isNearby=false){
-  ensureMap();
-  const resEl = byId('results');
-  resEl.innerHTML = '';
-
+function presentResults(results){
+  const resEl = byId('results'); resEl.innerHTML='';
   const found = results.filter(r=> (r.features||[]).length>0);
-  const down  = results.filter(r=> r.status==='down');
-  const zero  = results.filter(r=> r.status==='zero');
+  const down  = results.filter(r=> r.error);
+  const zero  = results.filter(r=> !r.error && (!r.features || r.features.length===0));
 
-  const msg = [];
-  if(found.length){ msg.push(`Se encontraron <b>${found.length}</b> capa(s) con coincidencias ${isNearby?'cerca':'en el punto'}.`); }
-  if(zero.length){ msg.push(`<span class=\"small\">${zero.length} capa(s) respondieron sin intersecciones.</span>`); }
-  if(down.length){ msg.push(`<span class=\"small\" style=\"color:#f7d38b\">${down.length} capa(s) no disponibles (fuente oficial).</span>`); }
-  addBot(msg.join('<br>'));
+  addBot(`En el punto: ${found.length} capa(s) con intersección; ${zero.length} sin intersección; ${down.length} no disponibles.`);
+  byId('mapResultsStatus').textContent = found.length? `Capas con resultados: ${found.map(r=>r.def.name).join(' | ')}` : 'Sin intersecciones en el punto.';
 
-  // Chips/toggles por capa (solo para las que tienen geometría dibujable)
-  layerStatuses.forEach(s=> addLayerToggle(s.id, s.name, s.status));
+  // marcador del punto en mapa de resultados
+  try{
+    const m=STATE.maps.results; const latlng=STATE.point;
+    L.circleMarker([latlng.lat, latlng.lng],{radius:6, color:var(--accent), weight:2}).addTo(m);
+  }catch{}
 
-  const summaryHits=[];
-  results.forEach(({def, features, status, usedBackup}, idx)=>{
+  results.forEach(({def, features, error, usedBackup}, idx)=>{
     const title = def.name || `Capa ${idx+1}`;
-    const count = (features||[]).length;
+    if(error){
+      const d = el('div',{}, `<span class="small">${title}: <span class="error">Capa no disponible actualmente</span></span>`);
+      resEl.appendChild(d); return;
+    }
 
     const details = el('details');
-    details.innerHTML = `<summary>${title}
-      <span class="small">(${count} resultado/s${usedBackup?' – usando respaldo':''})</span>
-      ${status==='ok'?'<span class="badge ok">OK</span>':status==='backup'?'<span class="badge backup">RESPALDO</span>':status==='down'?'<span class="badge down">FUERA DE SERVICIO</span>':'<span class="badge zero">SIN INTERSECCIÓN</span>'}
-    </summary>`;
-
-    // Acceso/Descripción desde la tabla pública
-    const meta = el('div',{className:'small', style:'margin:6px 0 8px'});
-    const acc = def.acceso ? `<a href="${def.acceso}" target="_blank" rel="noopener">acceso</a>` : 'acceso: N/D';
-    meta.innerHTML = `${acc} — ${def.descripcion||'Sin descripción'}`;
-    details.appendChild(meta);
+    details.innerHTML = `<summary>${title} <span class="small">(${features.length} resultado(s)${usedBackup?' – usando respaldo':''})</span></summary>`;
+    // metadatos de la tabla
+    if(def.desc) details.appendChild(el('div',{}, `<div class="small" style="margin:6px 0">${def.desc}</div>`));
+    if(def.acceso) details.appendChild(el('div',{}, `<div class="small"><a href="${def.acceso}" target="_blank" rel="noopener">Acceso público</a></div>`));
 
     (features||[]).forEach((ft,i)=>{
-      const attrs = ft.attributes || {};
-      const block = el('div',{style:'margin:6px 0'});
-      const head  = el('div',{className:'small'}, `#${i+1} — atributos`);
-      const tbl = el('table'); // toggle simple con <details> anidados
-      Object.keys(attrs).forEach(k=>{
-        const tr = el('tr'); tr.appendChild(el('td',{}, k)); tr.appendChild(el('td',{}, String(attrs[k]))); tbl.appendChild(tr);
-      });
-      block.append(head, tbl);
-      details.appendChild(block);
+      const attrs=ft.attributes||ft.properties||{};
+      const tbl = el('table');
+      Object.keys(attrs).forEach(k=>{ const tr=el('tr'); tr.appendChild(el('td',{},k)); tr.appendChild(el('td',{}, String(attrs[k]))); tbl.appendChild(tr); });
+      const wrap = el('div',{}); wrap.innerHTML = `<div class="small" style="margin-top:6px">#${i+1}</div>`; wrap.appendChild(tbl);
+      details.appendChild(wrap);
     });
-
     resEl.appendChild(details);
 
+    // Dibujo en mapa resultados (si hay geometrías en la respuesta, algunas APIs las omiten; aquí mostramos solo atributos)
     try{
-      const gj = featuresToGeoJSON(features);
-      if(gj.features.length){
-        const layer = L.geoJSON(gj, {style:()=>({color:'#0a784f', weight:1.1, fillColor:'#0a784f', fillOpacity:.35})});
-        layer.addTo(STATE.map);
-        STATE.drawn[def.id] = layer;
-        summaryHits.push(`${title}: ${count}`);
-      }
+      const gj = L.geoJSON((features||[]).map(f=>({type:'Feature', properties:f.attributes||f.properties||{}, geometry:f.geometry||null})), {
+        style:()=>({color:'#0a784f', weight:1.1, fillColor:'#0a784f', fillOpacity:.35})
+      });
+      if(STATE.maps.results){ gj.addTo(STATE.maps.results); STATE.drawnResults[def.id]=gj; }
     }catch{}
   });
 
-  byId('mapStatus').textContent = summaryHits.length? `Capas con resultados → ${summaryHits.join(' | ')}` : (isNearby?'Sin intersecciones en el radio.':'Sin intersecciones puntuales.');
+  // Ofrecer paso de ENTORNO
+  const row = addBot('¿Quieres ampliar la búsqueda en un radio alrededor del punto? (por defecto 10 km)');
+  const opts = el('div',{className:'opts'});
+  const b1 = el('button',{className:'opt'},'Sí, ampliar');
+  const b2 = el('button',{className:'opt secondary'},'No, gracias');
+  b1.onclick = ()=>{ byId('mapBufferWrap').style.display='block'; ensureMap('buffer'); addBot('Listo, ampliaré la búsqueda. Ajusta el radio y pulsa “Ampliar búsqueda”.'); };
+  b2.onclick = ()=>{ addUser('No, gracias'); addBot('Perfecto. Puedes cambiar de categoría o de punto cuando quieras.'); };
+  opts.append(b1,b2); row.querySelector('.bubble').appendChild(opts);
 }
 
-/* ===== Botones persistentes ===== */
-function wireButtons(){
-  byId('btnRefresh').onclick = ()=>{ if(STATE.point && STATE.category){ STATE.lastMode==='nearby' ? runQueryNearby() : runQueryPoint(); } };
-  byId('btnBackToPoint').onclick = ()=>{ STATE.category=null; STATE.point=null; if(STATE.marker&&STATE.map){STATE.map.removeLayer(STATE.marker); STATE.marker=null;} clearDrawn(); byId('mapWrap').style.display='none'; goToStep(0); };
-  byId('btnBackToCategory').onclick = ()=>{ if(STATE.point){ STATE.category=null; clearDrawn(); byId('mapWrap').style.display='none'; goToStep(2);} else { goToStep(0);} };
-  byId('fabRefresh').onclick = ()=> restartAll();
-  byId('btnNearby').onclick = ()=> runQueryNearby();
+// ===================== ENTORNO (BUFFER) =====================
+byId('btnRunBuffer').onclick = async ()=>{
+  if(!STATE.point || !STATE.category){ addBot('<span class="error">Falta el punto o la categoría.</span>'); return; }
+  const km = Math.max(1, Math.min(100, parseFloat(byId('bufferKm').value) || 10));
+  byId('mapBufferStatus').textContent = `Consultando en ${km} km…`;
+  const m = ensureMap('buffer');
+  if(STATE.bufferCircle){ STATE.maps.buffer.removeLayer(STATE.bufferCircle); }
+  STATE.bufferCircle = L.circle([STATE.point.lat, STATE.point.lng], {radius: km*1000, color:'#0a784f', weight:1, fillOpacity:.08});
+  STATE.bufferCircle.addTo(m); m.fitBounds(STATE.bufferCircle.getBounds(), {padding:[20,20]});
+
+  const defs = getDefsForCategory(STATE.category);
+  const results = [];
+  for(const def of defs){
+    let r = await queryLayerInRadius(def.primary, STATE.point, km*1000);
+    let usedBackup=false;
+    if(r.error && def.backup){ usedBackup=true; r = await queryLayerInRadius(def.backup, STATE.point, km*1000); }
+    results.push({def, usedBackup, ...r});
+  }
+  presentBufferResults(results);
+};
+
+function presentBufferResults(results){
+  const resEl = byId('bufferResults'); resEl.innerHTML='';
+  const found = results.filter(r=> (r.features||[]).length>0);
+  const down  = results.filter(r=> r.error);
+  addBot(`En el entorno: ${found.length} capa(s) con resultados; ${down.length} no disponibles.`);
+  byId('mapBufferStatus').textContent = found.length? `Capas con resultados: ${found.map(r=>r.def.name).join(' | ')}` : 'Sin resultados en el radio.';
+
+  results.forEach(({def, features, error, usedBackup}, idx)=>{
+    const title = def.name || `Capa ${idx+1}`;
+    if(error){ const d=el('div',{}, `<span class="small">${title}: <span class="error">Capa no disponible</span></span>`); resEl.appendChild(d); return; }
+
+    const details = el('details');
+    details.innerHTML = `<summary>${title} <span class=\"small\">(${features.length} en el radio${usedBackup?' – usando respaldo':''})</span></summary>`;
+    if(def.desc) details.appendChild(el('div',{}, `<div class=\"small\" style=\"margin:6px 0\">${def.desc}</div>`));
+    if(def.acceso) details.appendChild(el('div',{}, `<div class=\"small\"><a href=\"${def.acceso}\" target=\"_blank\" rel=\"noopener\">Acceso público</a></div>`));
+
+    (features||[]).forEach((ft,i)=>{
+      const attrs=ft.attributes||ft.properties||{};
+      const tbl = el('table');
+      Object.keys(attrs).forEach(k=>{ const tr=el('tr'); tr.appendChild(el('td',{},k)); tr.appendChild(el('td',{}, String(attrs[k]))); tbl.appendChild(tr); });
+      const wrap = el('div',{}); wrap.innerHTML = `<div class=\"small\" style=\"margin-top:6px\">#${i+1}</div>`; wrap.appendChild(tbl);
+      details.appendChild(wrap);
+    });
+    resEl.appendChild(details);
+
+    try{
+      const gj = L.geoJSON((features||[]).map(f=>({type:'Feature', properties:f.attributes||f.properties||{}, geometry:f.geometry||null})), {
+        style:()=>({color:'#0a784f', weight:1.1, fillColor:'#0a784f', fillOpacity:.25})
+      });
+      if(STATE.maps.buffer){ gj.addTo(STATE.maps.buffer); STATE.drawnBuffer[def.id]=gj; }
+    }catch{}
+  });
 }
 
-function restartAll(){
-  clearChat();
-  byId('results').innerHTML='';
-  byId('layerToggles').innerHTML='';
-  byId('nearbyBox').style.display='none';
-  byId('mapStatus').textContent='—';
-  if(STATE.marker && STATE.map){ STATE.map.removeLayer(STATE.marker); STATE.marker=null; }
-  clearDrawn();
-  STATE.step=0; STATE.point=null; STATE.category=null; STATE.defs=[]; STATE.lastMode='point';
-  byId('mapWrap').style.display='none';
+// ===================== PUNTO (mapa inicial) =====================
+byId('btnPickOnMap').onclick = ()=>{
+  const m = ensureMap('point');
+  addBot('Haz clic en el mapa para fijar tu punto.');
+  const handler = (e)=>{
+    setPoint(e.latlng);
+    m.off('click', handler);
+  };
+  m.on('click', handler);
+};
+
+byId('btnGeolocate').onclick = ()=>{
+  const m = ensureMap('point');
+  if(!navigator.geolocation){ addBot('<span class="error">Tu navegador no soporta geolocalización.</span>'); return; }
+  byId('mapPointStatus').textContent = 'Buscando ubicación…';
+  navigator.geolocation.getCurrentPosition(pos=>{
+    const lat=pos.coords.latitude, lng=pos.coords.longitude; m.setView([lat,lng], 14); setPoint({lat,lng});
+  }, err=>{ byId('mapPointStatus').textContent='—'; addBot('<span class="error">No logré obtener tu ubicación.</span>'); }, {enableHighAccuracy:true, timeout:10000});
+};
+
+byId('btnOSM').onclick = async ()=>{
+  const q = byId('osmQuery').value.trim(); if(!q){ addBot('<span class="small">Escribe una dirección.</span>'); return; }
+  const url = urlWithParams('https://nominatim.openstreetmap.org/search', {format:'json', q});
+  byId('mapPointStatus').textContent = 'Buscando en OSM…';
+  try{
+    const res = await fetch(url, {headers:{'Accept':'application/json'}});
+    const js = await res.json(); if(!Array.isArray(js) || !js.length){ addBot('<span class="small">No encontré resultados.</span>'); byId('mapPointStatus').textContent='—'; return; }
+    const {lat,lon, display_name} = js[0];
+    ensureMap('point').setView([+lat,+lon], 15);
+    setPoint({lat:+lat,lng:+lon}, display_name);
+  }catch(e){ addBot('<span class="error">Error al buscar en OSM.</span>'); } finally{ byId('mapPointStatus').textContent='—'; }
+};
+
+function setPoint(latlng, label){
+  ensureMap('point');
+  // Colocar marcador en mapa de punto
+  if(STATE.markers.point){ try{ STATE.maps.point.removeLayer(STATE.markers.point);}catch{} }
+  STATE.markers.point = L.marker([latlng.lat, latlng.lng]).addTo(STATE.maps.point);
+  STATE.maps.point.setView([latlng.lat, latlng.lng], 15);
+  STATE.point = latlng;
+  addBot(`Punto fijado${label?': <span class="small">'+label+'</span>':''}.`);
+  resetFromPointChange();
+  goToStep(2);
+}
+
+// ===================== NAVEGACIÓN Y CONTROLES SUPERIORES =====================
+byId('btnRefresh').onclick = ()=>{ if(STATE.point && STATE.category) runQuery(); };
+byId('btnBackToPoint').onclick = ()=>{ resetFromPointChange(); goToStep(0); };
+byId('btnBackToCategory').onclick = ()=>{ if(STATE.point){ resetFromCategoryChange(); goToStep(2);} else { goToStep(0);} };
+
+byId('sendBtn').onclick = ()=>{
+  const v = byId('freeInput').value.trim(); if(!v) return; addUser(v);
+  // Interpretación simple: si el usuario pega lat,lng, lo usamos como punto; si dice "cambiar categoría" o "punto", actuamos.
+  if(/^-?\d+(?:\.\d+)?\s*,\s*-?\d+(?:\.\d+)?$/.test(v)){
+    const [lat,lng]=v.split(',').map(Number); setPoint({lat,lng}); byId('freeInput').value=''; return;
+  }
+  if(/cambiar\s*categoria/i.test(v)){ resetFromCategoryChange(); goToStep(2); byId('freeInput').value=''; return; }
+  if(/cambiar\s*punto|reubicar/i.test(v)){ resetFromPointChange(); goToStep(0); byId('freeInput').value=''; return; }
+  addBot('<span class="small">Mensaje recibido. Puedes escribir una dirección, "cambiar categoría" o "cambiar punto".</span>');
+  byId('freeInput').value='';
+};
+
+// ===================== INTRO =====================
+async function intro(){
+  addBot('<span class="pill">Beta</span> Bienvenido. Esta app consulta servicios oficiales (REST) definidos en una tabla pública.');
+  addBot('Primero cargaré el catálogo…');
+  await loadCatalog();
+  if(!STATE.catalog.length){ addBot('<span class="error">No pude cargar capas con REST desde la tabla pública.</span>'); return; }
+  addBot(`Listo. Tengo <b>${STATE.categories.length}</b> categoría(s) con al menos una capa consultable.`);
   goToStep(0);
 }
 
-/* ===== Init ===== */
-(async function init(){
-  try{
-    await loadCatalog(); computeCategories();
-    addBot('Se cargó la tabla pública con variables y fuentes. Solo se ofrecerán categorías con REST/Respaldo disponible.');
-    wireButtons();
-    goToStep(0);
-  }catch(e){
-    addBot(`<div class=\"error\">Error al cargar la tabla de variables: ${e.message}. Intenta recargar.</div>`);
-  }
-})();
+// Inicia
+intro();
 </script>
 </body>
 </html>
