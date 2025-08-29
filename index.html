@@ -379,18 +379,22 @@ async function runQuery(){
   if(!defs.length){ addBot('<span class="error">No hay capas con REST en esta categoría.</span>'); return; }
 
   addBot('Consultando servicios de la categoría seleccionada…');
-  const results = [];
-  for(const def of defs){
-    // 1) Intentar primaria con Esri‑Leaflet; si falla, intentar manual; si aún falla y hay respaldo, repetir con respaldo
-    let r = await queryLayerAtPoint(def.primary, STATE.point);
-    let usedBackup = false;
-    if(r.error && def.backup){
-      usedBackup = true;
-      r = await queryLayerAtPoint(def.backup, STATE.point);
-    }
-    results.push({def, usedBackup, ...r});
+  // Ejecuta TODAS las capas en paralelo (como en ejemplo), manteniendo respaldo si falla la primaria
+const tasks = defs.map(async (def) => {
+  // 1) primaria con Esri‑Leaflet / manual dentro de queryLayerAtPoint
+  let r = await queryLayerAtPoint(def.primary, STATE.point);
+  let usedBackup = false;
+
+  // 2) si hubo error en primaria y hay respaldo, consulta respaldo
+  if (r.error && def.backup) {
+    usedBackup = true;
+    r = await queryLayerAtPoint(def.backup, STATE.point);
   }
-  presentResults(results);
+  return { def, usedBackup, ...r };
+});
+
+const results = await Promise.all(tasks);
+presentResults(results);
 }
 
 function presentResults(results){
