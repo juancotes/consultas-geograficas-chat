@@ -3,9 +3,11 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-  <title>Chat de consultas geográficas – flujo tipo árbol</title>
-  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin>
+  <title>Consultas geográficas (chat por opciones) — versión con Esri‑Leaflet</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin />
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin></script>
+  <!-- NUEVO: Esri‑Leaflet para consultas robustas como en ejemplo.html -->
+  <script src="https://unpkg.com/esri-leaflet@3.0.11/dist/esri-leaflet.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
   <style>
     :root{
@@ -14,6 +16,7 @@
     }
     html,body{height:100%}
     body{margin:0; background:var(--bg); color:var(--ink); font-family:system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Cantarell,Noto Sans,sans-serif;}
+    .app{display:grid; grid-template-columns:1fr; min-height:100vh}
 
     header{border-bottom:1px solid var(--border); background:linear-gradient(180deg, rgba(10,120,79,.18), rgba(10,120,79,0));}
     .wrap{max-width:960px; margin:0 auto; padding:14px 16px}
@@ -23,23 +26,26 @@
     .main{display:grid; grid-template-columns:1fr; gap:14px; padding:12px 0}
 
     /* Chat */
-    .chat{max-width:960px; margin:0 auto; display:grid; gap:12px; padding:0 16px 64px}
+    .chat{max-width:960px; margin:0 auto; display:grid; gap:12px; padding: 0 16px 52px}
     .msg{display:flex; gap:10px}
     .msg.bot{justify-content:flex-start}
     .msg.user{justify-content:flex-end}
-    .bubble{background:var(--panel); border:1px solid var(--border); padding:12px 14px; border-radius:14px; max-width:min(720px, 84vw)}
+    .bubble{background:var(--panel); border:1px solid var(--border); padding:12px 14px; border-radius:14px; max-width:min(720px, 84vw);} 
     .bubble.bot{border-top-left-radius:6px}
     .bubble.user{background:#0a5e41; border-color:transparent; border-bottom-right-radius:6px}
     .opts{display:flex; flex-wrap:wrap; gap:8px; margin-top:10px}
-    .opt{appearance:none; background:var(--accent); border:none; color:#fff; padding:8px 12px; border-radius:999px; cursor:pointer; font-weight:600}
+    .opt{appearance:none; background:var(--accent); border:none; color:#fff; padding:8px 12px; border-radius:999px; cursor:pointer; font-weight:600;}
     .opt.secondary{background:transparent; color:#d1efe4; border:1px solid var(--border)}
+
     .inline{display:flex; gap:8px; margin-top:8px}
     .inline input{flex:1; min-width:0; padding:10px 12px; border-radius:12px; border:1px solid var(--border); background:#08170f; color:var(--ink)}
     .inline button{padding:10px 12px; border-radius:12px; border:1px solid var(--border); background:var(--accent); color:#fff; cursor:pointer}
+
+    .hint{font-size:12px; color:var(--muted); margin-top:6px}
     .small{font-size:12px; color:var(--muted)}
 
-    /* Mapa */
-    .map-wrap{max-width:1100px; margin:0 auto; padding:0 16px 22px; display:none}
+    /* Mapa (oculto inicialmente) */
+    .map-wrap{max-width:1100px; margin:0 auto; padding: 0 16px 22px; display:none}
     .map-tools{display:flex; align-items:center; gap:10px; margin:10px 0; flex-wrap:wrap}
     .btn{background:transparent; border:1px solid var(--border); color:#d7eee6; padding:8px 10px; border-radius:10px; font-size:13px; text-decoration:none; cursor:pointer}
     .btn.primary{background:var(--accent-ink); color:white; border-color:transparent}
@@ -50,9 +56,10 @@
     table{width:100%; border-collapse:collapse; margin-top:6px; font-size:13px}
     td{border-top:1px dashed var(--border); padding:6px; vertical-align:top}
     td:first-child{color:#b7d1c7; width:40%}
+
     .error{background:#230b0b; border:1px solid #501c1c; color:#ffdddd; padding:10px 12px; border-radius:12px}
 
-    /* FAB global */
+    /* Burbuja fija de refresco */
     .refresh-fab{position:fixed; right:16px; bottom:16px; z-index:9999}
     .refresh-fab button{background:#0a5e41; color:#fff; border:none; border-radius:999px; padding:10px 14px; box-shadow:0 6px 18px rgba(0,0,0,.35); cursor:pointer; font-weight:700}
   </style>
@@ -61,14 +68,14 @@
   <header>
     <div class="wrap">
       <h1>Consultas geográficas (chat por opciones)</h1>
-      <div class="tag">Flujo tipo árbol: si cambias arriba, se poda lo de abajo. Solo categorías con REST o respaldo.</div>
+      <div class="tag">Se ofrecen solo categorías con REST/REST de respaldo (tabla pública). Ahora con consultas Esri‑Leaflet.</div>
     </div>
   </header>
 
   <main class="main">
-    <section id="chat" class="chat" aria-live="polite"></section>
+    <section class="chat" id="chat" aria-live="polite"></section>
 
-    <section id="mapWrap" class="map-wrap" aria-label="Resultados y mapa">
+    <section class="map-wrap" id="mapWrap" aria-label="Resultados y mapa">
       <div class="map-tools">
         <button class="btn" id="btnBackToPoint">⟲ Volver a elegir punto</button>
         <button class="btn" id="btnBackToCategory">⟲ Cambiar categoría</button>
@@ -80,36 +87,35 @@
     </section>
   </main>
 
+  <!-- Burbuja fija siempre visible para refrescar TODO el chat -->
   <div class="refresh-fab"><button id="fabRefresh">⟳ Refrescar chat</button></div>
 
 <script>
-/* ===== Config ===== */
+/******************** CONFIG ********************/
 const CSV_URL = 'https://docs.google.com/spreadsheets/d/1Smop4rx0K4pj5sHXD19DE3iqcwTCyqn9ohPxIuJsZ8s/export?format=csv&gid=0';
 const CO_VIEWBOX = '-79.1,12.6,-66.8,-4.3';
 
-/* ===== Estado global (para rebobinar ramas) ===== */
+/******************** STATE ********************/
 const STATE = {
   catalog: [],
   categories: [],
-  step: 0,               // 0: método de punto; 1: punto fijado; 2: categoría; 3: resultados
-  point: null,           // {lat,lng}
+  step: 0,            // 0: elegir método punto; 1: punto fijado; 2: categoría elegida; 3: resultados
+  point: null,        // {lat,lng}
   category: null,
   map: null,
   marker: null,
-  drawn: {},             // id -> L.GeoJSON
+  drawn: {},          // id -> L.GeoJSON/FeatureLayer
 };
 
-/* ===== Helpers UI ===== */
-const byId = id => document.getElementById(id);
-const chatEl = byId('chat');
-function el(tag, attrs={}, html=''){ const n=document.createElement(tag); Object.assign(n, attrs); if(html!==undefined) n.innerHTML=html; return n; }
-function scrollChat(){ chatEl.scrollTop = chatEl.scrollHeight; }
-function addBot(html){ const row=el('div',{className:'msg bot'}); row.appendChild(el('div',{className:'bubble bot'}, html)); chatEl.appendChild(row); scrollChat(); return row; }
-function addUser(html){ const row=el('div',{className:'msg user'}); row.appendChild(el('div',{className:'bubble user'}, html)); chatEl.appendChild(row); scrollChat(); }
-function clearChat(){ chatEl.innerHTML=''; }
-
-/* ===== Normalización del catálogo ===== */
+/******************** UTILS ********************/
 const deaccent = s => (s||'').normalize('NFD').replace(/\p{Diacritic}/gu,'');
+const byId = id => document.getElementById(id);
+function el(tag, attrs={}, html=''){ const n=document.createElement(tag); Object.assign(n, attrs); if(html!==undefined) n.innerHTML=html; return n; }
+function scrollChat(){ const c=byId('chat'); c.scrollTop = c.scrollHeight; }
+function addBot(text){ const row=el('div',{className:'msg bot'}); row.appendChild(el('div',{className:'bubble bot'}, text)); byId('chat').appendChild(row); scrollChat(); return row; }
+function addUser(text){ const row=el('div',{className:'msg user'}); row.appendChild(el('div',{className:'bubble user'}, text)); byId('chat').appendChild(row); scrollChat(); }
+function clearChat(){ byId('chat').innerHTML=''; }
+
 function normalizeRecord(rec){
   const out={};
   for(const [k,v] of Object.entries(rec)){
@@ -140,7 +146,7 @@ function computeCategories(){
   STATE.categories = Array.from(set).sort((a,b)=>a.localeCompare(b,'es',{sensitivity:'base'}));
 }
 
-/* ===== Mapa ===== */
+/******************** MAPA ********************/
 function ensureMap(){
   const wrap = byId('mapWrap');
   wrap.style.display='block';
@@ -162,10 +168,10 @@ function clearDrawn(){
   STATE.drawn = {};
 }
 
-/* ===== Flujo tipo árbol (rebobinar según step) ===== */
+/******************** FLUJO Y REBOBINADO ********************/
 function goToStep(step){
   STATE.step = step;
-  clearChat(); // siempre re-render desde el inicio hasta el step actual
+  clearChat();
   if(step===0) renderStep0();
   if(step>=1){ renderStep0(true); renderStep1(); }
   if(step>=2){ renderStep2(); }
@@ -207,7 +213,7 @@ function renderStep3(){
   byId('mapStatus').textContent = 'Consultando…';
 }
 
-/* ===== Interacciones del punto ===== */
+/******************** INTERACCIONES INICIALES ********************/
 function handleUseMyLocation(){
   addUser('Usar mi ubicación');
   if(!navigator.geolocation){ addBot('<span class="error">Tu navegador no permite geolocalización.</span>'); return; }
@@ -225,12 +231,13 @@ function handleChooseOther(){
   const b1 = el('button',{className:'opt'},'🔎 Buscar con OSM');
   const b2 = el('button',{className:'opt'},'🗺️ Marcar en mapa');
   opts.append(b1,b2); row.querySelector('.bubble').appendChild(opts);
+
   b1.onclick = () => askSearch();
   b2.onclick = () => pickOnMap();
 }
 
 function askSearch(){
-  const row = addBot('Escribe un lugar o dirección (Colombia).');
+  const row = addBot('Escribe un lugar o dirección (solo Colombia).');
   const box = el('div',{className:'inline'});
   const inp = el('input',{type:'text', placeholder:'Cra 7 # 12-34, Bogotá… o “Parque Arví”'});
   const btn = el('button',{},'Buscar');
@@ -267,12 +274,12 @@ async function doOSMSearch(q){
 
 function pickOnMap(){
   ensureMap();
-  addBot('Haz clic en el mapa para fijar/actualizar el punto.');
+  addBot('Haz clic en el mapa para fijar/actualizar el punto (puedes cambiarlo y luego “Refrescar chat” para re‑hacer desde aquí).');
   const handler = (e)=>{ STATE.point = {lat:e.latlng.lat, lng:e.latlng.lng}; setMarker(STATE.point); goToStep(1); renderStep2(); };
   STATE.map.once('click', handler);
 }
 
-/* ===== REST: robustecer consultas ===== */
+/******************** CONSULTAS REST ROBUSTAS ********************/
 function urlWithParams(base, params){
   const u = new URL(base);
   Object.entries(params).forEach(([k,v])=> u.searchParams.set(k,String(v)));
@@ -282,7 +289,7 @@ function urlWithParams(base, params){
 async function fetchJson(u, extra={}){
   const url = u.includes('?') ? `${u}&f=json` : `${u}?f=json`;
   const ctrl = new AbortController();
-  const t = setTimeout(()=>ctrl.abort('timeout'), 10000);
+  const t = setTimeout(()=>ctrl.abort('timeout'), 12000);
   try{
     const res = await fetch(url, {signal:ctrl.signal, ...extra});
     clearTimeout(t);
@@ -303,17 +310,31 @@ async function expandToFeatureLayers(url){
   return {layers:[url]};
 }
 
-async function queryLayerAtPoint(layerUrl, point){
-  const info = await fetchJson(layerUrl);
-  if(info.error) return {error:'Servicio no disponible', layerUrl};
+// NUEVO: intento de consulta con Esri‑Leaflet (como en ejemplo.html)
+async function tryEsriLeafletQuery(layerUrl, point){
+  try{
+    const latlng = L.latLng(point.lat, point.lng);
+    // Si es root de MapServer, expandir a subcapa 0 por defecto
+    const {layers} = await expandToFeatureLayers(layerUrl);
+    const targetUrl = layers[0] || layerUrl; // usar primera subcapa si existe
+    // Usar query().intersects(latlng)
+    const q = L.esri.query({ url: targetUrl }).where('1=1').intersects(latlng).returnGeometry(false).limit(2000);
+    const fc = await new Promise((resolve) => q.run((err, json)=> resolve(err? {error:String(err)} : (json||{}))));
+    if(fc && fc.error){ return {error:fc.error, layerUrl:targetUrl}; }
+    const features = Array.isArray(fc?.features)? fc.features: [];
+    return {features, strategy:'esri-leaflet', layerUrl:targetUrl};
+  }catch(e){
+    return {error:String(e)};
+  }
+}
 
+// Método manual existente (mantener)
+async function queryLayerAtPointManual(layerUrl, point){
   const base = {
-    where: '1=1', f:'json', returnGeometry:false, outFields:'*',
+    where:'1=1', f:'json', returnGeometry:false, outFields:'*',
     geometry: JSON.stringify({x:point.lng, y:point.lat, spatialReference:{wkid:4326}}),
-    geometryType: 'esriGeometryPoint', spatialRel:'esriSpatialRelIntersects',
-    inSR:4326, outSR:4326
+    geometryType:'esriGeometryPoint', spatialRel:'esriSpatialRelIntersects', inSR:4326, outSR:4326
   };
-
   async function runOnce(params){
     const queryUrl = layerUrl.replace(/\/?$/,'') + '/query';
     const u = urlWithParams(queryUrl, params);
@@ -322,20 +343,28 @@ async function queryLayerAtPoint(layerUrl, point){
     const feats = Array.isArray(js.features)? js.features: [];
     return {features:feats};
   }
-
   let res = await runOnce(base);
   if(res.error) return {error:res.error, layerUrl};
   if(res.features && res.features.length) return {features:res.features, strategy:'point'};
-
   res = await runOnce({...base, distance:50, units:'esriSRUnit_Meter'});
   if(res.error) return {error:res.error, layerUrl};
   if(res.features && res.features.length) return {features:res.features, strategy:'near50m'};
-
   res = await runOnce({...base, distance:250, units:'esriSRUnit_Meter'});
   if(res.error) return {error:res.error, layerUrl};
   if(res.features && res.features.length) return {features:res.features, strategy:'near250m'};
-
   return {features:[], strategy:'none'};
+}
+
+// Enrutador: intenta primero Esri‑Leaflet; si falla o viene vacío, usa manual; si falla y hay respaldo, usar respaldo
+async function queryLayerAtPoint(layerUrl, point){
+  // Primer intento: Esri‑Leaflet (cuando sea posible)
+  const first = await tryEsriLeafletQuery(layerUrl, point);
+  if(first && !first.error && (first.features?.length ?? 0) >= 0){
+    // Si es una respuesta válida (aunque 0), úsala — Esri maneja CORS y formatos problemáticos mejor
+    return first;
+  }
+  // Fallback manual
+  return await queryLayerAtPointManual(layerUrl, point);
 }
 
 function getDefsForCategory(cat){
@@ -352,10 +381,13 @@ async function runQuery(){
   addBot('Consultando servicios de la categoría seleccionada…');
   const results = [];
   for(const def of defs){
-    // Intentar servicio primario; si falla, usar respaldo
+    // 1) Intentar primaria con Esri‑Leaflet; si falla, intentar manual; si aún falla y hay respaldo, repetir con respaldo
     let r = await queryLayerAtPoint(def.primary, STATE.point);
     let usedBackup = false;
-    if(r.error && def.backup){ usedBackup = true; r = await queryLayerAtPoint(def.backup, STATE.point); }
+    if(r.error && def.backup){
+      usedBackup = true;
+      r = await queryLayerAtPoint(def.backup, STATE.point);
+    }
     results.push({def, usedBackup, ...r});
   }
   presentResults(results);
@@ -372,17 +404,20 @@ function presentResults(results){
 
   const msg = [];
   if(found.length){ msg.push(`Se encontraron <b>${found.length}</b> capa(s) con coincidencias en el punto.`); }
-  if(zero.length){ msg.push(`<span class=\"small\">${zero.length} capa(s) respondieron sin intersecciones tras probar distintas estrategias.</span>`); }
-  if(down.length){ msg.push(`<span class=\"small\" style=\"color:#f7d38b\">${down.length} capa(s) no disponibles actualmente (problema de la fuente oficial). No se marcan como \"sin intersección\".</span>`); }
+  if(zero.length){ msg.push(`<span class=\"small\">${zero.length} capa(s) respondieron sin intersecciones.</span>`); }
+  if(down.length){ msg.push(`<span class=\"small\" style=\"color:#f7d38b\">${down.length} capa(s) no disponibles actualmente (problema de la fuente oficial).</span>`); }
   addBot(msg.join('<br>'));
 
   const summaryHits=[];
   results.forEach(({def, features, error, usedBackup, strategy}, idx)=>{
     const title = def.name || `Capa ${idx+1}`;
-    if(error){ resEl.appendChild(el('div',{}, `<span class=\"small\">${title}: <span style=\"color:var(--warn)\">Capa no disponible (error de servicio)</span></span>`)); return; }
+    if(error){
+      const d = el('div',{}, `<span class=\"small\">${title}: <span style=\"color:var(--warn)\">Capa no disponible (error de servicio)</span></span>`);
+      resEl.appendChild(d); return;
+    }
     const count = (features||[]).length;
     const details = el('details');
-    details.innerHTML = `<summary>${title} <span class=\"small\">(${count} resultado/s${usedBackup?' – usando respaldo':''}${strategy&&strategy!=='point'?` – estrategia: ${strategy}`:''})</span></summary>`;
+    details.innerHTML = `<summary>${title} <span class=\"small\">(${count} resultado/s${usedBackup?' – usando respaldo':''}${strategy && strategy!=='point'?` – estrategia: ${strategy}`:''})</span></summary>`;
 
     (features||[]).forEach((ft,i)=>{
       const attrs = ft.attributes || ft.properties || {};
@@ -407,7 +442,7 @@ function presentResults(results){
   byId('mapStatus').textContent = summaryHits.length? `Capas con resultados → ${summaryHits.join(' | ')}` : 'Sin intersecciones.';
 }
 
-/* ===== Botones persistentes ===== */
+/******************** BOTONES PERSISTENTES ********************/
 function wireButtons(){
   byId('btnRefresh').onclick = ()=>{ if(STATE.point && STATE.category) runQuery(); };
   byId('btnBackToPoint').onclick = ()=>{ STATE.category=null; goToStep(0); };
@@ -425,11 +460,10 @@ function restartAll(){
   goToStep(0);
 }
 
-/* ===== Init ===== */
+/******************** INIT ********************/
 (async function init(){
   try{
-    await loadCatalog();
-    computeCategories();
+    await loadCatalog(); computeCategories();
     addBot('Se cargó la tabla pública con variables y fuentes. Solo se ofrecerán categorías con REST/Respaldo disponible.');
     wireButtons();
     goToStep(0);
