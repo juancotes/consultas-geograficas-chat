@@ -443,10 +443,47 @@ function presentResults(results){
     }catch{}
   });
 
-  byId('mapStatus').textContent = summaryHits.length? `Capas con resultados → ${summaryHits.join(' | ')}` : 'Sin intersecciones.';
+  byId('mapStatus').textContent = summaryHits.length? `Capas con resultados → ${summaryHits.join(' | ')}` : 'Sin intersecciones.';// ===== UI de capas con checkboxes (similar a ejemplo) =====
+  try{
+    const panel = byId('layersPanel');
+    const list  = byId('layersList');
+    if(panel && list){
+      list.innerHTML='';
+      const foundOnly = results.filter(r => (r.features||[]).length>0 && STATE.drawn[r.def.id]);
+      if(foundOnly.length){
+        panel.style.display='block';
+        foundOnly.forEach(({def, features})=>{
+          // fila con checkbox
+          const row = document.createElement('div'); row.style.display='flex'; row.style.alignItems='center'; row.style.gap='8px'; row.style.margin='6px 0';
+          const cb  = document.createElement('input'); cb.type='checkbox'; cb.id = `layer_${def.id}`; cb.checked = !!(STATE.map && STATE.drawn[def.id] && STATE.map.hasLayer(STATE.drawn[def.id]));
+          const label = document.createElement('label'); label.htmlFor = cb.id; label.textContent = `${def.name || def.id} (${(features||[]).length})`;
+          row.appendChild(cb); row.appendChild(label); list.appendChild(row);
+
+          cb.addEventListener('change', ()=>{
+            const layer = STATE.drawn[def.id];
+            if(!layer) return;
+            if(cb.checked){ layer.addTo(STATE.map); }
+            else { if(STATE.map.hasLayer(layer)) STATE.map.removeLayer(layer); }
+            // actualizar estado
+            reportLayersState();
+          });
+        });
+        reportLayersState();
+      } else {
+        panel.style.display='none';
+      }
+    }
+  }catch{}
 }
 
 /******************** BOTONES PERSISTENTES ********************/
+function reportLayersState(){
+  const list = byId('layersList'); if(!list) return;
+  const items = Array.from(list.querySelectorAll('input[type="checkbox"]'));
+  const txt = items.filter(cb => cb.checked).map(cb => byId(cb.id.replace('layer_','') ) ? '' : cb.nextSibling?.textContent || '').filter(Boolean).join(' | ');
+  // En lugar de recomputar nombres, usamos estado del DOM
+  const stateEl = byId('layersState'); if(stateEl){ stateEl.textContent = items.filter(cb=>cb.checked).length ? 'Capas visibles: ' + items.filter(cb=>cb.checked).map(cb => cb.nextSibling?.textContent.split(' (')[0]).join(' | ') : 'Sin capas activas.'; }
+}
 function wireButtons(){
   byId('btnRefresh').onclick = ()=>{ if(STATE.point && STATE.category) runQuery(); };
   byId('btnBackToPoint').onclick = ()=>{ STATE.category=null; goToStep(0); };
